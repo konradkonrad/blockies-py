@@ -10,6 +10,8 @@ import random
 from itertools import islice
 import colorsys
 import ctypes
+from hashlib import sha256
+from itertools import cycle
 
 LOWER = chr(9604)
 RESET = '\033[39;49m'
@@ -55,12 +57,43 @@ class XORshiftPRNG(object):
         return result
 
 
+class SHA256PRNG(object):
+    """Alternative PRNG that iterates over the SHA256 sum of the lower-cased
+    `seed`.
+
+    Rationale: This is much simpler to implement across languages/platforms and can be expected
+    to be resistant against visual collisions on single-byte mismatches.
+
+    For example with the XORshiftPRNG
+
+        0x00112266bcfc3ce2a72a7211fff9ef200e30178a
+        0x00112266bcfc3ce2a72a7211fff9ef200e30178b
+        0x00112266bcfc3ce2a72a7211fff9ef200e30178c
+        0x00112266bcfc3ce2a72a7211fff9ef200e30178d
+        0x00112266bcfc3ce2a72a7211fff9ef200e30178e
+        0x00112266bcfc3ce2a72a7211fff9ef200e30178f
+
+    will all yield the same color scheme, whereas SHA256PRNG will create very different sequences
+    (and hence color schemes) for the above.
+    """
+
+    def __init__(self, seed: str):
+        if seed[:2] == '0x':
+            seed = seed[2:]
+        self.randseed = sha256(seed.lower().encode('utf-8')).digest()
+        self.sequence = cycle(i / 256. for i in self.randseed)
+
+    def rand(self):
+        return next(self.sequence)
+
+
 def sanity_check():
     # Sanity check (test that RNG has same result as js version)
     first_rand = 0.2292061443440616
     seed = '0xfadc801b8b7ff0030f36ba700359d30bb12786e4'
     test = XORshiftPRNG(seed)
     assert test.rand() == first_rand
+
 
 sanity_check()
 
@@ -122,17 +155,20 @@ def createImageData(size, prng):
 
 
 class Options(object):
-    def __init__(self,
+
+    def __init__(
+        self,
         seed=None,
         size=8,
         color=None,
         bgcolor=None,
-        spotcolor=None
+        spotcolor=None,
+        prng=XORshiftPRNG
     ):
         self.seed = seed or hex(
             math.floor((random.random() * math.pow(10, 16)))
         )
-        self.prng = XORshiftPRNG(seed)
+        self.prng = prng(seed)
         self.size = size
         self.color = color or Color.createColor(self.prng)
         self.bgcolor = bgcolor or Color.createColor(self.prng)
@@ -179,10 +215,10 @@ def renderANSI(opts, _print=False):
         return rows
 
 
-def create_blockie(seed, _print=False):
+def create_blockie(seed, _print=False, prng=XORshiftPRNG):
     """main method: creates a blockie with standard
     options from `seed` and optionally print it to stdout."""
-    opts = Options(seed)
+    opts = Options(seed, prng=prng)
     return renderANSI(opts, _print=_print)
 
 
@@ -193,10 +229,12 @@ def main():
         from blockies.vanity import vanity
         for a in vanity:
             create_blockie(a, True)
+            create_blockie(a, True, prng=SHA256PRNG)
             print(a)
     else:
         seed = sys.argv[1].lower()
         create_blockie(seed, True)
+        create_blockie(seed, True, prng=SHA256PRNG)
 
 
 if __name__ == '__main__':
