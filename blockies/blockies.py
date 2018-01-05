@@ -131,6 +131,28 @@ class Color(object):
         return (self.hue, self.light, self.saturation)
 
 
+def createPyramidData(size, prng):
+    width = size
+    height = size
+    mirrorWidth = math.floor(width / 2)
+    rowBits = [i + 1 for i in list(range(height // 2)) + list(reversed(range(height // 2)))]
+    data = []
+    for y in range(height):
+        row = []
+        for x in range(rowBits[y]):
+            row.append(math.floor(prng.rand() * 2.3))
+        for x in range(mirrorWidth - rowBits[y]):
+            row.append(-1)
+        row = list(reversed(row))
+        r = row[0:mirrorWidth]
+        r.reverse()
+        row.extend(r)
+
+        for i in range(len(row)):
+            data.append(row[i])
+    return data
+
+
 def createImageData(size, prng):
     width = size  # Only support square icons for now
     height = size
@@ -185,8 +207,8 @@ def draw_two(first, second):
     return first + second + RESET
 
 
-def renderANSI(opts, _print=False):
-    imageData = createImageData(opts.size, opts.prng)
+def renderANSI(opts, _print=False, data_function=createImageData):
+    imageData = data_function(opts.size, opts.prng)
     width = opts.size
     rowsData = iter(
         [imageData[i: i + width] for i in range(0, len(imageData), width)]
@@ -194,6 +216,7 @@ def renderANSI(opts, _print=False):
     rows = []
     odd, even = list(islice(rowsData, 2))
     color_by_field = {
+        -1: (0, 0, 0),
         0: opts.bgcolor.numeric_rgb,
         1: opts.color.numeric_rgb,
         2: opts.spotcolor.numeric_rgb,
@@ -218,8 +241,15 @@ def renderANSI(opts, _print=False):
 def create_blockie(seed, _print=False, prng=XORshiftPRNG):
     """main method: creates a blockie with standard
     options from `seed` and optionally print it to stdout."""
-    opts = Options(seed, prng=prng)
-    return renderANSI(opts, _print=_print)
+    opts = Options(seed, prng=prng, size=8)
+    return renderANSI(opts, _print=_print, data_function=createImageData)
+
+
+def create_blockie_v2(seed, _print=False, prng=SHA256PRNG):
+    """v2 version method: create a "pyramie" with standard
+    options from `seed` and optionally print it to stdout."""
+    opts = Options(seed, prng=prng, size=10)
+    return renderANSI(opts, _print=_print, data_function=createPyramidData)
 
 
 def main():
@@ -229,12 +259,12 @@ def main():
         from blockies.vanity import vanity
         for a in vanity:
             create_blockie(a, True)
-            create_blockie(a, True, prng=SHA256PRNG)
+            create_blockie_v2(a, True, prng=SHA256PRNG)
             print(a)
     else:
         seed = sys.argv[1].lower()
         create_blockie(seed, True)
-        create_blockie(seed, True, prng=SHA256PRNG)
+        create_blockie_v2(seed, True, prng=SHA256PRNG)
 
 
 if __name__ == '__main__':
